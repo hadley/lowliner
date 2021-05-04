@@ -10,19 +10,19 @@
 \alias{flatten_dfr}
 \alias{flatten_dfc}
 \alias{flatten_df}
-\title{Flatten a list of lists into a simple vector.}
+\title{Flatten a list of into a simpler structure}
 \usage{
 flatten(.x)
 
-flatten_lgl(.x)
+flatten_lgl(.x, ..., name_spec = NULL)
 
-flatten_int(.x)
+flatten_int(.x, ..., name_spec = NULL)
 
-flatten_dbl(.x)
+flatten_dbl(.x, ..., name_spec = NULL)
 
-flatten_chr(.x)
+flatten_chr(.x, ..., name_spec = NULL)
 
-flatten_raw(.x)
+flatten_raw(.x, ..., name_spec = NULL)
 
 flatten_dfr(.x, .id = NULL)
 
@@ -32,6 +32,26 @@ flatten_dfc(.x)
 \item{.x}{A list to flatten. The contents of the list can be anything for
 \code{flatten()} (as a list is returned), but the contents must match the
 type for the other functions.}
+
+\item{...}{These dots are for future extensions and must be empty.}
+
+\item{name_spec}{A name specification for combining
+inner and outer names. This is relevant for inputs passed with a
+name, when these inputs are themselves named, like \code{outer = c(inner = 1)}, or when they have length greater than 1: \code{outer = 1:2}. By default, these cases trigger an error. You can resolve
+the error by providing a specification that describes how to
+combine the names or the indices of the inner vector with the
+name of the input. This specification can be:
+\itemize{
+\item A function of two arguments. The outer name is passed as a
+string to the first argument, and the inner names or positions
+are passed as second argument.
+\item An anonymous function as a purrr-style formula.
+\item A glue specification of the form \code{"{outer}_{inner}"}.
+\item An \code{\link[rlang:zap]{rlang::zap()}} object, in which case both outer and inner
+names are ignored and the result is unnamed.
+}
+
+See the \link[vctrs:name_spec]{name specification topic}.}
 
 \item{.id}{Either a string or \code{NULL}. If a string, the output will contain
 a variable with that name, storing either the name (if \code{.x} is named) or
@@ -50,10 +70,53 @@ row-binding and column-binding respectively. They require dplyr to
 be installed.
 }
 \description{
-These functions remove a level hierarchy from a list. They are similar to
-\code{\link[=unlist]{unlist()}}, but they only ever remove a single layer of hierarchy and they
-are type-stable, so you always know what the type of the output is.
+These functions remove a level hierarchy from a list. They are
+similar to \code{\link[=unlist]{unlist()}}, but:
+\itemize{
+\item They only ever remove a single layer of hierarchy.
+\item They are type-stable, so you always know what the type of the
+output is. On the other hand the final size is not stable and
+depends on the contents of the list.
 }
+}
+\section{List and atomic flattening}{
+
+
+The behaviours of \code{flatten()} and of the atomic variants are a bit
+different:
+\itemize{
+\item \code{flatten()} accepts lists that contain any kind of elements. The
+elements whose \code{typeof()} is a list (including data frames) are
+spliced into the containing list. This operation always returns a
+list. If the list contains other lists, one level of nestedness
+removed. If the list doesn't contain other lists, \code{flatten()}
+doesn't do anything. The final size is equal to the sum of the
+sizes of the list elements, plus the number of non-list elements.
+
+These expressions are equivalent:\preformatted{flatten(list(1, list(2), list(list(3))))
+c(list(1), list(2), list(list(3)))
+list(1, 2, list(3))
+}
+\item The atomic variants like \code{flatten_int()} expect lists containing
+elements that can be coerced to the target type. For example
+\code{flatten_int(list(FALSE, 1L, c(2.0, 3.0)))} returns \code{0:3}. The
+elements are assembled with \code{\link[vctrs:vec_c]{vctrs::vec_c()}} (via
+\code{\link[vctrs:vec_chop]{vctrs::vec_unchop()}}, a wrapper that takes lists of
+vectors). The final size is equal to the sum of the sizes of all
+elements.
+
+These expressions are equivalent:\preformatted{flatten_int(list(1, 2, 3:4))
+c(1, 2, 3:4)
+}
+}
+
+Despite these differences, these functions are said to be
+"flattening" because of the dependence of the final size on the
+contents of the input list. The output is usually larger after
+flattening (though it could well be smaller if some of the
+flattened elements are empty).
+}
+
 \examples{
 x <- rerun(2, sample(4))
 x

@@ -9,6 +9,41 @@
   See #768 for more information.
 
 
+## Switch to vctrs
+
+* The atomic vector variants of `flatten()`, like `flatten_int()`, now
+  use vctrs for coercion and concatenation. This change makes these
+  functions more flexible and consistent. For instance lists
+  containing factors are properly flattened thanks to vctrs coercions:
+
+  ```r
+  flatten_chr(list("foo", factor("bar")))
+  #> [1] "foo" "bar"
+  ```
+
+  And you can now flatten double vectors into an integer vector:
+  ```{r}
+  flatten_int(list(1.0, c(2.0, 3.0)))
+  #> [1] 1 2 3
+  ```
+
+  The switch to vctrs coercions does entail a stricter behaviour.
+  `map_chr()` used to succeed with any type by deparsing the
+  inputs:
+
+  ```{r}
+  flatten_chr(list("foo", 1))
+  #> [1] "foo"      "1.000000"
+  ```
+
+  With vctrs coercions, this is now deprecated and will become an
+  error in the future.
+
+* The atomic vector variants of `flatten()` gain a `name_spec`
+  argument to control how the outer list names are merged with the
+  inner vector names.
+
+
 ## Features and fixes
 
 * `every()` and `some()` now properly check the return value of their

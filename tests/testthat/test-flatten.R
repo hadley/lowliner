@@ -2,7 +2,7 @@ context("flatten")
 
 test_that("input must be a list", {
   expect_bad_type_error(flatten(1), "`.x` must be a list, not a double vector")
-  expect_bad_type_error(flatten_dbl(1), "`.x` must be a list, not a double vector")
+  expect_error(flatten_dbl(1), "must be")
 })
 
 test_that("contents of list must be supported types", {
@@ -56,7 +56,7 @@ test_that("child names beat parent names", {
 # atomic flatten ----------------------------------------------------------
 
 test_that("must be a list", {
-  expect_bad_type_error(flatten_lgl(1), "must be a list")
+  expect_error(flatten_lgl(1), "must be")
 })
 
 test_that("can flatten all atomic vectors", {
@@ -70,6 +70,51 @@ test_that("preserves inner names", {
   expect_equal(
     flatten_dbl(list(c(a = 1), c(b = 2))),
     c(a = 1, b = 2)
+  )
+})
+
+test_that("uses vctrs coercions", {
+  expect_identical(flatten_int(list(FALSE, 1)), 0:1)
+  expect_identical(flatten_chr(list("foo", factor("bar"))), c("foo", "bar"))
+  expect_error(flatten_int(list(FALSE, 1.5)), class = "vctrs_error_cast_lossy")
+})
+
+test_that("can flatten data frames for compatibility", {
+  expect_identical(flatten_dbl(mtcars), unlist(unstructure(mtcars)))
+})
+
+test_that("can still flatten with historical coercion", {
+  expect_error(
+    with_lifecycle_errors(flatten_chr(list("", 1)))
+  )
+  expect_true(
+    with_lifecycle_silence(is_character(flatten_chr(list("", 1)), n = 2))
+  )
+})
+
+test_that("outer names are dropped by default for compatibility", {
+  expect_identical(
+    flatten_int(list(x = c(foo = 1L, bar = 2L), baz = 3L)),
+    set_names(1:3, c("foo", "bar", "baz"))
+  )
+  expect_identical(
+    flatten_int(list(x = c(foo = 1L, bar = 2L), baz = 3L), name_spec = "{outer}_{inner}"),
+    set_names(1:3, c("x_foo", "x_bar", "baz"))
+  )
+})
+
+test_that("inner names may be unnamed", {
+  expect_identical(
+    flatten_int(list(c(1L, 2L), 3L)),
+    1:3
+  )
+  expect_identical(
+    flatten_int(list(x = c(1L, 2L), 3L)),
+    named(1:3) # FIXME: Should we allow zapping names from a name-spec?
+  )
+  expect_identical(
+    flatten_int(list(x = c(1L, 2L), baz = 3L)),
+    c(1L, 2L, baz = 3L)
   )
 })
 
