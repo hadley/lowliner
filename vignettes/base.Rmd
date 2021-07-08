@@ -1,0 +1,261 @@
+---
+title: "purrr <-> base R"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{purrr <-> base R}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 4.5,
+  fig.align = "center"
+)
+options(tibble.print_min = 6, tibble.print_max = 6)
+```
+
+# Introduction
+
+This vignette compares purrr functionals to their base R equivalents, focussing primarily on the map family and related functions. This helps those familiar with base R understand better what purrr does, and shows purrr users how you might express the same ideas in base R code. We’ll start with a rough overview of the major differences, give a rough translation guide, and then show a few examples.
+
+```{r setup}
+library(purrr)
+library(tibble)
+```
+
+## Key differences
+
+There are two primary differences between the base apply family and the purrr map family: purrr functions are named more consistently, and more fully explore the space of input and output variants.
+
+* purrr functions consistently use `.` as prefix to avoid function arguments
+  mismatches. Base functions use a variety of techniques including upper case
+  (e.g. `lapply(X, FUN, ...)`) or require anonymous functions (e.g. `Map()`). 
+  See <https://adv-r.hadley.nz/functionals.html#argument-names> for more 
+  details.
+
+* All map functions are type stable: you can predict the type of the output
+  using little information about the inputs. In contrast, the base functions
+  `sapply()` and `mapply()` automatically simplify.
+
+* The map family functions all start with the data, followed by the function, 
+  then any additional constant argument. Most apply functions also follow this
+  pattern, but `mapply()` starts with the function, and `Map()` has no way
+  to supply additional constant arguments.
+  
+* purrr functions provide all combinations of input and output variants, and
+  include variants specifically for the common two argument case. 
+
+* The map family all support an alternative succinct function definition syntax 
+  that helps with the most common cases.
+
+
+## Direct translations
+
+The following sections give a high-level translation between base R commands and their purrr equivalents. See function documentation for the details.
+
+### `Map` functions
+
+Here `X` denotes a vector or a list and `FUN` denotes a function
+
+Output | Input | Base R | purrr
+-------|-------|--------|-----------
+List | 1 vector | `lapply()` | `map()`
+List | 2 vectors | `mapply()`, `Map()` | `map2()`
+List | >2 vectors | `mapply()`, `Map()` | `pmap()`
+Atomic vector of desired type | 1 vector | `vapply()` | `map_lgl()` (logical), `map_int()` (integer), `map_dbl()` (double), `map_chr()` (character), `map_raw()` (raw)
+Atomic vector of desired type | 2 vectors | `mapply()`, `Map()`, then `is.*()` to check type | `map2_lgl()` (logical), `map2_int()` (integer), `map2_dbl()` (double), `map2_chr()` (character), `map2_raw()` (raw)
+Atomic vector of desired type | >2 vectors | `mapply()`, `Map()`, then `is.*()` to check type | `pmap_lgl()` (logical), `pmap_int()` (integer), `pmap_dbl()` (double), `pmap_chr()` (character), `pmap_raw()` (raw)
+Side effect only | 1 vector | loops | `walk()`
+Side effect only | 2 vectors | loops | `walk2()`
+Side effect only | >2 vectors | loops | `pwalk()`
+Data frame (`rbind` outputs) | 1 vector | `lapply()` then `rbind()` | `map_dfr()`
+Data frame (`rbind` outputs) | 2 vectors | `mapply()`/`Map()` then `rbind()` | `map2_dfr()`
+Data frame (`rbind` outputs) | >2 vectors | `mapply()`/`Map()` then `rbind()` | `pmap_dfr()`
+Data frame (`cbind` outputs) | 1 vector | `lapply()` then `cbind()` | `map_dfc()`
+Data frame (`cbind` outputs) | 2 vectors | `mapply()`/`Map()` then `cbind()` | `map2_dfc()`
+Data frame (`cbind` outputs) | >2 vectors | `mapply()`/`Map()` then `cbind()` | `pmap_dfc()`
+Any | Vector and its names | `l/s/vapply(X, function(x) FUN(x, names(x)))` or `mapply/Map(FUN, X, names(X))` | `imap()`, `imap_*()` (`lgl`, `dbl`, `dfr`, and etc. just like for `map()`, `map2()`, and `pmap()`)
+Any | Selected elements of the vector | `l/s/vapply(X[index], FUN, ...)` | `map_if()`, `map_at()`
+List | Recursively apply to list within list | `rapply()` | `map_depth()`
+List | List only | `lapply()` | `lmap()`, `lmap_at()`, `lmap_if()`
+
+### Shorthands
+
+When an anonymous function is required in `*apply` or `map` functions, purrr offers shorthands to make the anonymous function more readable and easier to write. However, using shorthands is not recommended inside functions and packages. Here `l` denotes a list of arguments, and `f` denotes some expression involving arguments of the anonymous function.
+
+Input | base R | purrr
+----|--------|---------
+1 vector | `function(x) f(x)` | `~ f(.x)`
+2 vectors | `function(x, y) f(x, y)` | `~ f(.x, .y)`
+More than 2 vectors | `function(x, y, z, ...) f(x, y, z, ...)` or `function(l) f(l[[1]], l[[2]], l[[3]], ...)` or `function(l) do.call(f, args = l)` | `~ f(..1, ..2, ..3, ...)`
+Extract from list of vectors the `i`th element of each vector in the list | `lapply(X, function(x) tryCatch(x[["a"]], error = function(e) NA))`, `lapply(X, function(x) tryCatch(x[[3]], error = function(e) NA))` | `map(X, "a", default = NA)`, `map(X, 3, .default = NA)`
+
+### Predicates
+
+Here `.p`, a predicate, denotes a function that returns `TRUE` or `FALSE` indicating whether an object fulfills a criterion, such as `is.character`, and
+
+Description | base R | purrr
+------------|--------|---------
+Find the value or position of the first match | `X[.p(X)][1]`, `which(.p(X))[1]` | `detect()`, `detect_index()`
+Do every or some elements of a list satisfy a predicate? | For atomic vectors, `all/any(.p(X))`; for lists, `all/any(sapply(X, .p))` | `every()`, `some()`
+Does a list contain an object? | `any(sapply(X, function(x) x == object))` | `has_element()`
+Keep or discard elements using a predicate function | For atomic vectors, `X[.p(X)]`, `X[!.p(X)]`; for lists, `X[sapply(X, .p)]`, `X[!sapply(X, .p)]`, `X[sapply(X, function(x) length(.p(x)) > 0)]` | `keep()`, `discard()`, `compact()`
+Negate a predicate function | `function(x) !.p(x)` | `negate()`
+
+### Plucking
+
+Extracting or modifying elements of a list
+
+Description | base R | purrr
+------------|--------|---------
+Extract an element from a vector or environment, can be recursive | `[`, `[[`, or a chain of these | `pluck()`, `chuck()`
+Modify an element of a vector or environment | `X[[index]] <- y` | `modify_in()`, `assign_in()`
+Create an attribute getter function | `function(x) attr(x, which = a)` | `attr_getter()`
+
+### Other vector transforms
+
+Description | base R | purrr
+------------|--------|---------
+Accumulate intermediate results of a vector reduction | `Reduce(FUN, X, accumulate = TRUE)` | `accumulate()` (`FUN` takes 2 arguments), `accumulate2()` (`FUN` takes 3 arguments)
+Produce all combinations of list elements | `expand.grid()` | `cross()`, `cross2()`, `cross3()`, `cross_df()`
+Flatten a list of lists into a simple vector | `unlist(X, recursive = FALSE)` | `flatten()`, or with type specificity, `flatten_lgl()`, `flatten_int()`, `flatten_dbl()`, `flatten_chr()`, `flatten_raw()`, `flatten_dfr()`, `flatten_dfc()`
+Recursively combine two lists | `c(X, Y)`, but more complicated to merge recursively | `list_merge()`, `list_modify()`
+Reduce a list to a single value by iteratively applying a binary function | `Reduce(FUN, X, accumulate = FALSE)` | `reduce()`, `reduce2()`
+
+### Adverbs
+
+Adverbs modify the action of a function; taking a function as input and returning a function with modified action as output.
+
+Description | base R | purrr
+------------|--------|-----
+Compose functions | `function(x) f1(f2(f3(x)))` |`compose()`
+Lift the domain of a function | `function(...) FUN(list(...))`, `function(l) do.call(FUN, l)` | `lift()`, `lift_dl()`, `lift_dv()`, `lift_vl()`, `lift_vd()`, `lift_ld()`, `lift_lv()`
+Partial apply a function, filling in some arguments | `function(x) FUN(x, y = foo)` | `partial()`
+Handling errors, warnings, and messages | `try()`, `tryCatch()`, `withCallingHandlers()` | `safely()`, `quietly()`, `possibly()`, `auto_browse()`
+
+### Misc
+
+Description | base R | purrr
+------------|--------|---------
+Default value for `NULL` | `function(x, y) if (is.null(x)) return(y) else return(x)` | `%||%`
+Coerce array to list | For matrices, `as.data.frame`, perhaps after transposing, as data frames are lists | `array_tree()`, `array_branch()`
+Coerce a list to a vector | `unlist()` | `as_vector()`, `simplify()` (simplify if possible), `simplify_all()` (recursively simplify); the purrr version can have type specificity.
+Generate random sample from a Bernoulli distribution | `function(n, p) as.logical(rbinom(n = n, size = 1, prob = p))` | `rbernoulli()`
+Generate random sample from a discrete uniform distribution | `function(n, a, b) sample(a:b, size = n)` | `rdunif()`
+Set names of a vector | `setNames()` | `set_names()`, but has more features and stricter than `setNames()`
+
+## Examples
+
+### Applying function to one vector
+
+Suppose we would like to generate a list of samples of 5 from normal distributions with the same standard deviation but different means. We want a list of numerical vectors. Then we would like to find the median of each sample, which should be a numeric vector. Then we will plot a histogram for each sample.
+
+Take the samples, base R approach
+```{r}
+set.seed(2020)
+means <- 1:4
+(samples <- lapply(means, rnorm, n = 5, sd = 1))
+```
+
+Take samples, purrr approach. Here `map()` is just like `lapply()`, always returning a list, no simplification.
+```{r}
+set.seed(2020)
+(samples <- map(means, rnorm, n = 5, sd = 1))
+```
+
+Compute the medians, base R approach
+
+```{r}
+# type stable
+(medians <- vapply(samples, median, FUN.VALUE = numeric(1L)))
+
+# not type stable
+(medians <- sapply(samples, median))
+```
+
+Compute the medians, purrr approach
+
+```{r}
+(medians <- map_dbl(samples, median))
+```
+
+Here `map_dbl()` ensures that the the output is double, throwing an error if the output is of other types.
+
+How about when we simply want the side effect when applying a function on a vector, such as a plot or a file output, but not the returned values? 
+
+Side effect, base R approach:
+```{r}
+par(mfrow = c(2,2))
+for (s in samples) {
+  hist(s, xlab = "value", main = "")
+}
+```
+
+Side effect, purrr approach:
+
+```{r}
+par(mfrow = c(2,2))
+walk(samples, ~ hist(.x, xlab = "value", main = ""))
+```
+
+
+### Applying function to more than one vector
+
+Suppose we would like to take samples from normal distributions with different means and standard deviations. We need to apply `rnorm()` to two vectors, one for means, the other for standard deviations.
+
+```{r}
+means <- 1:4
+sds <- 1:4
+```
+
+Get samples, base R approach:
+```{r}
+set.seed(2020)
+(samples <- mapply(rnorm, mean = means, sd = sds, MoreArgs = list(n = 5), SIMPLIFY = FALSE))
+```
+
+Get samples, purrr approach
+```{r}
+set.seed(2020)
+(samples <- map2(means, sds, rnorm, n = 5))
+```
+
+Calculating the median would be the same as the last section.
+```{r}
+(medians <- map_dbl(samples, median))
+```
+
+### Data frame outputs
+
+Suppose the output is a list data frames with the same column names; it makes sense to combine these data frames into a single data frame.
+
+Base R approach:
+```{r}
+set.seed(2020)
+dfs <- lapply(means, function(m) {
+  tibble(
+    x = rnorm(3, mean = m, sd = 1),
+    y = rnorm(3, mean = m + 1, sd = 2),
+    z = sample(LETTERS, 1)
+  )
+})
+
+df <- do.call(rbind, dfs)
+df
+```
+
+Then the purrr approach:
+```{r}
+set.seed(2020)
+df <- map_dfr(means, ~ tibble(
+  x = rnorm(3, mean = .x, sd = 1),
+  y = rnorm(3, mean = .x + 1, sd = 2),
+  z = sample(LETTERS, 1)
+))
+df
+```
+
