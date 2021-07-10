@@ -25,9 +25,11 @@ at_selection <- function(nm, .at){
   .at
 }
 
-recycle_args <- function(args) {
+recycle_args <- function(args, n = NULL) {
   lengths <- map_int(args, length)
-  n <- max(lengths)
+  if (is.null(n)) {
+    n <- max(lengths)
+  }
 
   stopifnot(all(lengths == 1L | lengths == n))
   to_recycle <- lengths == 1L
